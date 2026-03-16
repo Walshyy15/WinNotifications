@@ -1,0 +1,94 @@
+name: "🗑️ Delete Files"
+
+# Delete one or more files from the repo directly from the Actions tab.
+# Supports deleting a single file or a comma-separated list of files.
+
+on:
+  workflow_dispatch:
+    inputs:
+      file_paths:
+        description: "File(s) to delete (comma-separated, e.g., old.txt, temp/junk.js)"
+        required: true
+        type: string
+      commit_message:
+        description: "Commit message"
+        required: false
+        default: ""
+        type: string
+      branch:
+        description: "Branch to commit to"
+        required: false
+        default: "main"
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  delete-files:
+    name: "🗑️ Delete Files"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "⬇️ Checkout repository"
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: "🗑️ Delete specified files"
+        id: delete
+        run: |
+          IFS=',' read -ra FILES <<< "${{ inputs.file_paths }}"
+          DELETED=""
+          SKIPPED=""
+
+          for file in "${FILES[@]}"; do
+            file=$(echo "$file" | xargs)  # trim whitespace
+            if [ -f "$file" ]; then
+              rm "$file"
+              DELETED="$DELETED\n- \`$file\`"
+              echo "🗑️ Deleted: $file"
+            else
+              SKIPPED="$SKIPPED\n- \`$file\` (not found)"
+              echo "⚠️ File not found: $file"
+            fi
+          done
+
+          echo "deleted<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DELETED" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "skipped<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$SKIPPED" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: "📦 Commit and push"
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+
+          if [[ -n $(git status --porcelain) ]]; then
+            COMMIT_MSG="${{ inputs.commit_message }}"
+            if [ -z "$COMMIT_MSG" ]; then
+              COMMIT_MSG="🗑️ Delete files: ${{ inputs.file_paths }}"
+            fi
+
+            git commit -m "$COMMIT_MSG"
+            git push origin ${{ inputs.branch }}
+            echo "✅ Deletion committed and pushed!"
+          else
+            echo "ℹ️ No changes to commit (files may not have existed)."
+          fi
+
+      - name: "📊 Summary"
+        run: |
+          echo "## 🗑️ Deletion Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Deleted:" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.delete.outputs.deleted }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ steps.delete.outputs.skipped }}" ]; then
+            echo "### Skipped (not found):" >> $GITHUB_STEP_SUMMARY
+            echo "${{ steps.delete.outputs.skipped }}" >> $GITHUB_STEP_SUMMARY
+          fi

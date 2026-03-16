@@ -1,0 +1,77 @@
+name: "✏️ Quick File Editor"
+
+# Create or update any file directly from the GitHub Actions UI.
+# No need to clone, edit, commit, push — just fill in the inputs and run!
+
+on:
+  workflow_dispatch:
+    inputs:
+      file_path:
+        description: "File path (e.g., src/app.js or docs/notes.md)"
+        required: true
+        type: string
+      file_content:
+        description: "File content (paste your code/text here)"
+        required: true
+        type: string
+      commit_message:
+        description: "Commit message"
+        required: false
+        default: ""
+        type: string
+      branch:
+        description: "Branch to commit to"
+        required: false
+        default: "main"
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  quick-edit:
+    name: "✏️ Edit File"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "⬇️ Checkout repository"
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: "📝 Create/Update file"
+        run: |
+          # Create parent directories if needed
+          mkdir -p "$(dirname '${{ inputs.file_path }}')"
+
+          # Write content to file
+          cat << 'FILECONTENT_EOF' > "${{ inputs.file_path }}"
+          ${{ inputs.file_content }}
+          FILECONTENT_EOF
+
+          echo "✅ File '${{ inputs.file_path }}' has been written."
+
+      - name: "📦 Commit and push"
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${{ inputs.file_path }}"
+
+          COMMIT_MSG="${{ inputs.commit_message }}"
+          if [ -z "$COMMIT_MSG" ]; then
+            COMMIT_MSG="✏️ Update ${{ inputs.file_path }}"
+          fi
+
+          git commit -m "$COMMIT_MSG"
+          git push origin ${{ inputs.branch }}
+          echo "✅ Changes pushed!"
+
+      - name: "📊 Summary"
+        run: |
+          echo "## ✏️ Quick Edit Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Detail | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **File** | \`${{ inputs.file_path }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Branch** | \`${{ inputs.branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit** | ${{ inputs.commit_message || 'Auto-generated' }} |" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,73 @@
+name: "🔄 Auto Commit & Push"
+
+# This workflow automatically commits and pushes any uncommitted changes.
+# Trigger it manually from the Actions tab whenever you've made changes
+# through the GitHub web editor, API, or any other method.
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_message:
+        description: "Commit message (leave blank for auto-generated)"
+        required: false
+        default: ""
+        type: string
+      branch:
+        description: "Branch to commit to"
+        required: false
+        default: "main"
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  auto-commit:
+    name: "📦 Commit & Push Changes"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "⬇️ Checkout repository"
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+          fetch-depth: 0
+
+      - name: "🔍 Check for changes"
+        id: check
+        run: |
+          git status
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "✅ Changes detected!"
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No changes to commit."
+          fi
+
+      - name: "📝 Commit and push"
+        if: steps.check.outputs.has_changes == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+
+          COMMIT_MSG="${{ inputs.commit_message }}"
+          if [ -z "$COMMIT_MSG" ]; then
+            COMMIT_MSG="🔄 Auto-commit: $(date +'%Y-%m-%d %H:%M:%S UTC')"
+          fi
+
+          git commit -m "$COMMIT_MSG"
+          git push origin ${{ inputs.branch }}
+          echo "✅ Changes committed and pushed successfully!"
+
+      - name: "📊 Summary"
+        run: |
+          echo "## 📊 Commit Summary" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.check.outputs.has_changes }}" == "true" ]; then
+            echo "✅ Changes were committed and pushed to \`${{ inputs.branch }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Commit message:** ${{ inputs.commit_message || '🔄 Auto-commit' }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "ℹ️ No changes were detected. Nothing to commit." >> $GITHUB_STEP_SUMMARY
+          fi
